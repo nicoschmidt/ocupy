@@ -1,5 +1,7 @@
 import numpy as np
-import scikits.statsmodels.api as sm
+#from res.analysis.utils import memoize
+#from res.analysis.logistic_regression import logistic_regression
+#import scikits.statsmodels as sm
 
 def spline_fdm(fm,base_spec = None, spline_order = 3):
     # Set up parameters in relation to image_size
@@ -13,7 +15,7 @@ def spline_fdm(fm,base_spec = None, spline_order = 3):
     # compute down scale factor
     down_scale = float(height)/fm.image_size[0] 
     # compute basis
-    #base = spline_base(height, width, nr_knots_x, nr_knots_y, spline_order)
+    base = spline_base(height, width, nr_knots_x, nr_knots_y, spline_order)
     # compute target histogram
     # this specifies left edges of the histogram bins, i.e. fixations between
     # ]0 binedge[0]] are included. --> fixations are ceiled
@@ -30,7 +32,7 @@ def spline_pdf(samples,e_y,e_x,base=None,nr_knots_x=3,nr_knots_y=3,hist=None):
     if hist == None:
         (hist, _) = np.histogramdd(samples, (e_y, e_x))
     poiss_model = sm.Poisson(hist.reshape(-1,1), base.T)
-    results = poiss_model.fit(maxiter=100, method='bfgs')
+    results = poiss_model.fit(maxiter = 7000,method='newton')
     big_base = spline_base(height*1,width,
           nr_knots_x, nr_knots_y, 3)
     #big_base = sm.add_constant(big_base.T)
@@ -74,8 +76,8 @@ def augknt(knots,order):
     [a.append(knots[-1]) for t in range(0,order)]
     return np.array(a)     
 
-def spline_base(height, width, Nr_Knots_x = 5.0, Nr_Knots_y = 5.0, 
-        spline_order = 3,scale_factor=None):
+#@memoize
+def spline_base(height, width,Nr_Knots_x = 5.0, Nr_Knots_y = 5.0, spline_order = 3,scale_factor=None):
     """Computes a set of 2D spline basis functions. 
     
     The basis functions cover the entire space in height*width and can 
@@ -134,13 +136,11 @@ def N(u,i,p,knots):
             return 0.0
     else:
         try:
-            k = (( float((u-knots[i]))/float((knots[i+p] - knots[i]) )) 
-                    * N(u,i,p-1,knots))
+            k = ( float((u-knots[i]))/float((knots[i+p] - knots[i]) )) * N(u,i,p-1,knots)
         except ZeroDivisionError:
             k = 0.0
         try:
-            q = (( float((knots[i+p+1] - u))/float((knots[i+p+1] - knots[i+1])))
-                    * N(u,i+1,p-1,knots))
+            q = ( float((knots[i+p+1] - u))/float((knots[i+p+1] - knots[i+1]))) * N(u,i+1,p-1,knots)
         except ZeroDivisionError:
             q  = 0.0 
         return float(k + q)

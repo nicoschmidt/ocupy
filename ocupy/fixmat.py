@@ -51,20 +51,22 @@ class FixMat(object):
         self._subjects = []
         self._fields = []
         self._categories = categories
-        self._parameters = {}
+        self._parameters = []
+        self._num_fix = 0
         if fixmat is not None and index is not None:
             index = index.reshape(-1,).astype(bool)
             assert index.shape[0] == fixmat._num_fix, ("Index vector for " +
                 "filtering has to have the same length as the fields of the fixmat")
-            self._subjects = fixmat._subjects
-            self._fields = fixmat._fields
-            for  field in self._fields:
+            if fixmat._subjects is not None:
+                self._subjects = fixmat._subjects[:]
+            self._fields = fixmat._fields[:]
+            for  field in fixmat._fields:
                 self.__dict__[field] = fixmat.__dict__[field][index]
-            self._parameters = fixmat._parameters
-            for (param, value) in fixmat._parameters.iteritems():
-                self.__dict__[param] = value
-                self._parameters[param] = self.__dict__[param]
+            self._parameters = fixmat._parameters[:]
+            for param in fixmat._parameters:
+                self.__dict__[param] = fixmat.__dict__[param]
             self._num_fix = index.sum()
+            
     
     def __str__(self):
         desc = "Fixmat with %i fixations and the following data fields:\n" % (
@@ -271,6 +273,37 @@ class FixMat(object):
                 'Cannot delete field %s. No such field exists'%name))
         self._fields.remove(name)
         del self.__dict__[name]
+    
+    def add_parameter(self, name, data):
+        """
+        Add a new parameter to the fixmat.
+
+        Parameters:
+            name : string
+                Name of the new parameter
+            data : object
+                Data for the new parameter.
+        """
+        if name in self._parameters:
+            raise (ValueError(
+                'Cannot add parameter %s. A parameter of the same name already exists.'
+                %name))
+        self._parameters.append(name)
+        self.__dict__[name] = data
+    
+    def rm_parameter(self, name):
+        """
+        Remove a parameter from the fixmat.
+
+        Parameters:
+            name : string
+                Name of the parameter to be removed
+        """
+        if not name in self._parameters:
+            raise (ValueError(
+                'Cannot delete parameter %s. No such parameter exists'%name))
+        self._parameters.remove(name)
+        del self.__dict__[name]
 
     def join(self, fm_new):
         """
@@ -293,8 +326,8 @@ class FixMat(object):
                 one subject"""))
         
         # Check if parameters are equal
-        #for ((n_cu, v_cu), (_, v_all)) in zip(fm_new._parameters.iteritems(),
-        #                                        self._parameters.iteritems()):
+        #for ((n_cu, v_cu), (_, v_all)) in zip(fm_new._parameters.iteritems(), # _parameters has changed to a list!
+        #                                        self._parameters.iteritems()): # _parameters has changed to a list!
         #    if not v_cu == v_all:
         #        raise (RuntimeError("""Parameter %s has value %s in current and
         #             value %s in new fixmat""" %(n_cu, str(v_all), str(v_cu))))
@@ -516,7 +549,10 @@ def compute_fdm(fixmat, fwhm=2, scale_factor=1):
     kernel_sigma = fwhm * fixmat.pixels_per_degree * scale_factor
     kernel_sigma = kernel_sigma / (2 * (2 * np.log(2)) ** .5)
     fdm = gaussian_filter(hist, kernel_sigma, order=0, mode='constant')
-    return fdm / fdm.sum()
+    if fdm.sum()==0:
+        return fdm
+    else:
+        return fdm / fdm.sum()
 
 def relative_bias(fm,  scale_factor = 1, estimator = None):
     """
@@ -630,11 +666,10 @@ def FixmatFactory(fixmatfile, categories = None):
     fixmat._fields = fields.keys()
     for (field, value) in fields.iteritems():
         fixmat.__dict__[field] = value.reshape(-1,) 
-
-    fixmat._parameters = parameters
+    fixmat._parameters = parameters.keys()
+    for (param, value) in parameters.iteritems():
+        fixmat.__dict__[param] = value
     fixmat._subjects = None
-    for (field, value) in parameters.iteritems():
-        fixmat.__dict__[field] = value
     fixmat._num_fix = num_fix
     return fixmat
     
@@ -688,7 +723,7 @@ def TestFixmatFactory(points = None, categories = [1],
  
 
     fixmat._fields = ['x', 'y', 'SUBJECTINDEX', 'filenumber', 'category', 'fix']
-    fixmat._parameters = default_parameters
+    fixmat._parameters = default_parameters.keys()
     for (field, value) in default_parameters.iteritems():
         fixmat.__dict__[field] = value
     fixmat._num_fix  = len(fixmat.x)
@@ -699,9 +734,9 @@ def VectorFixmatFactory(fields, parameters, categories = None):
     fm._fields = fields.keys()
     for (field, value) in fields.iteritems(): 
         fm.__dict__[field] = value 
-    fm._parameters = parameters
-    fm._subjects = None
+    fm._parameters = parameters.keys()
     for (field, value) in parameters.iteritems(): 
        fm.__dict__[field] = value
     fm._num_fix = len(fm.__dict__[fields.keys()[0]])
+    fm._subjects = None
     return fm
